@@ -1,46 +1,38 @@
 #include <stdlib.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <time.h>
 #include <sys/time.h>
 #include <assert.h>
 #include <string.h>
 
+enum {
+	TESTS_MAX = 32
+};
+
+struct test {
+	const char *name;
+	double (*fun)(void);
+} tests[TESTS_MAX];
+
+size_t tests_max = 0;
+
 double
-test_call(void)
+stub_call(void)
 {
 	return 0.0;
 }
 
 double
-test_memset(void)
+stub_memset(void)
 {
 	struct timespec t;
 	memset(&t, 0, sizeof(t));
 	return t.tv_sec * 1e9 + t.tv_nsec;
 }
 
-#define TEST_CLOCK(name, clockid)                                          \
-double                                                                         \
-test_clock_##name(void)                                                        \
-{                                                                              \
-	struct timespec t;                                                     \
-	clock_gettime(clockid, &t);                                            \
-	return t.tv_sec * 1e9 + t.tv_nsec;                                     \
-}
-TEST_CLOCK(realtime,         CLOCK_REALTIME)
-TEST_CLOCK(monotonic,        CLOCK_MONOTONIC)
-TEST_CLOCK(process_cpu,      CLOCK_PROCESS_CPUTIME_ID)
-TEST_CLOCK(thread_cpu,       CLOCK_THREAD_CPUTIME_ID)
-TEST_CLOCK(monotonic_raw,    CLOCK_MONOTONIC_RAW)
-TEST_CLOCK(realtime_coarse,  CLOCK_REALTIME_COARSE)
-TEST_CLOCK(monotonic_coarse, CLOCK_MONOTONIC_COARSE)
-TEST_CLOCK(boottime,         CLOCK_BOOTTIME)
-TEST_CLOCK(realtime_alarm,   CLOCK_REALTIME_ALARM)
-TEST_CLOCK(boottime_alarm,   CLOCK_BOOTTIME_ALARM)
-#undef TEST_CLOCK
-
 double
-test_gettimeofday(void)
+now_gettimeofday(void)
 {
 	struct timeval t;
 	gettimeofday(&t, NULL);
@@ -48,30 +40,103 @@ test_gettimeofday(void)
 }
 
 double
-test_time(void)
+now_time(void)
 {
 	return time(NULL);
 }
 
-struct test {
+struct clockinfo {
 	const char *name;
-	double (*fun)(void);
-} TESTS[] = {
-	{"CALL", test_call},
-	{"MEMSET", test_memset},
-	{"CLOCK_REALTIME", test_clock_realtime},
-	{"CLOCK_MONOTONIC", test_clock_monotonic},
-	{"CLOCK_PROCESS_CPUTIME_ID", test_clock_process_cpu},
-	{"CLOCK_THREAD_CPUTIME_ID", test_clock_thread_cpu},
-	{"CLOCK_MONOTONIC_RAW", test_clock_monotonic_raw},
-	{"CLOCK_REALTIME_COARSE", test_clock_realtime_coarse},
-	{"CLOCK_MONOTONIC_COARSE", test_clock_monotonic_coarse},
-	{"CLOCK_BOOTTIME", test_clock_boottime},
-	{"CLOCK_REALTIME_ALARM", test_clock_realtime_alarm},
-	{"CLOCK_BOOTTIME_ALARM", test_clock_boottime_alarm},
-	{"gettimeofday", test_gettimeofday},
-	{"time", test_time},
+	clockid_t clk_id;
+} clockinfos[] = {
+
+	{"CLOCK_REALTIME",  CLOCK_REALTIME},
+#if defined(CLOCK_REALTIME_COARSE)
+	{"CLOCK_REALTIME_COARSE", CLOCK_REALTIME_COARSE},
+#endif /* defined(CLOCK_REALTIME_COARSE) */
+#if defined(CLOCK_REALTIME_ALARM)
+	{"CLOCK_REALTIME_ALARM", CLOCK_REALTIME_ALARM},
+#endif /* defined(CLOCK_REALTIME_ALARM) */
+#if defined(CLOCK_REALTIME_PRECISE)
+	{"CLOCK_REALTIME_PRECISE", CLOCK_REALTIME_PRECISE},
+#endif /* defined(CLOCK_REALTIME_PRECISE) */
+#if defined(CLOCK_REALTIME_FAST)
+	{"CLOCK_REALTIME_FAST", CLOCK_REALTIME_FAST},
+#endif /* defined(CLOCK_REALTIME_FAST) */
+
+	{"CLOCK_MONOTONIC", CLOCK_MONOTONIC},
+#if defined(CLOCK_MONOTONIC_COARSE)
+	{"CLOCK_MONOTONIC_COARSE", CLOCK_MONOTONIC_COARSE},
+#endif /* defined(CLOCK_MONOTONIC_COARSE) */
+#if defined(CLOCK_MONOTONIC_RAW)
+	{"CLOCK_MONOTONIC_RAW", CLOCK_MONOTONIC_RAW},
+#endif /* defined(CLOCK_MONOTONIC_RAW) */
+#if defined(CLOCK_MONOTONIC_PRECISE)
+	{"CLOCK_MONOTONIC_PRECISE", CLOCK_MONOTONIC_PRECISE},
+#endif /* defined(CLOCK_MONOTONIC_PRECISE) */
+#if defined(CLOCK_MONOTONIC_FAST)
+	{"CLOCK_MONOTONIC_FAST", CLOCK_MONOTONIC_FAST},
+#endif /* defined(CLOCK_MONOTONIC_FAST) */
+
+
+#if defined(CLOCK_PROCESS_CPUTIME_ID)
+	{"CLOCK_PROCESS_CPUTIME_ID", CLOCK_PROCESS_CPUTIME_ID},
+#endif /* defined(CLOCK_PROCESS_CPUTIME_ID) */
+#if defined(CLOCK_THREAD_CPUTIME_ID)
+	{"CLOCK_THREAD_CPUTIME_ID", CLOCK_THREAD_CPUTIME_ID},
+#endif /* defined(CLOCK_THREAD_CPUTIME_ID) */
+
+#if defined(CLOCK_BOOTTIME)
+	{"CLOCK_BOOTTIME", CLOCK_BOOTTIME},
+#endif /* defined(CLOCK_BOOTTIME) */
+#if defined(CLOCK_BOOTTIME_ALARM)
+	{"CLOCK_BOOTTIME_ALARM", CLOCK_BOOTTIME_ALARM},
+#endif /* defined(CLOCK_BOOTTIME_ALARM) */
+#if defined(CLOCK_UPTIME_PRECISE)
+	{"CLOCK_UPTIME_PRECISE", CLOCK_UPTIME_PRECISE},
+#endif /* defined(CLOCK_UPTIME_PRECISE) */
+#if defined(CLOCK_UPTIME_FAST)
+	{"CLOCK_UPTIME_FAST", CLOCK_UPTIME_FAST},
+#endif /* defined(CLOCK_UPTIME_FAST) */
+
+#if defined(CLOCK_SECOND)
+	{"CLOCK_SECOND", CLOCK_SECOND},
+#endif /* defined(CLOCK_SECOND) */
+#if defined(CLOCK_PROF)
+	{"CLOCK_PROF", CLOCK_PROF},
+#endif /* defined(CLOCK_SECOND) */
 };
+
+static clockid_t clock_id;
+
+bool
+check_clock_gettime(void)
+{
+	struct timespec t;
+	return clock_gettime(clock_id, &t) == 0;
+}
+
+double
+now_clock_gettime(void)
+{
+	struct timespec t;
+	clock_gettime(clock_id, &t);
+	return t.tv_sec * 1e9 + t.tv_nsec;
+}
+
+double
+bench_begin()
+{
+	return now_gettimeofday();
+}
+
+void
+bench_end(double start, const char *name, long count)
+{
+	double end = now_gettimeofday();
+	fprintf(stderr, "%-24s %.2lf ns/call\n", name,
+		(end - start) / count);
+}
 
 int
 main(int argc, char *argv[])
@@ -82,17 +147,45 @@ main(int argc, char *argv[])
 	}
 
 	fprintf(stderr, "Count: %lu\n", count);
-	for (size_t i = 0; i < sizeof(TESTS) / sizeof(*TESTS); i++) {
-		double start = test_gettimeofday(), end;
 
+	double start;
+
+	start = bench_begin();
+	for (int c = 0; c < count; c++) {
+		stub_call();
+	}
+	bench_end(start, "call", count);
+
+	start = bench_begin();
+	for (int c = 0; c < count; c++) {
+		stub_memset();
+	}
+	bench_end(start, "memset", count);
+
+	start = bench_begin();
+	for (int c = 0; c < count; c++) {
+		now_gettimeofday();
+	}
+	bench_end(start, "gettimeofday", count);
+
+	start = bench_begin();
+	for (int c = 0; c < count; c++) {
+		now_time();
+	}
+	bench_end(start, "time", count);
+
+	/* clock_gettime benchmarks */
+	for (size_t i = 0; i < sizeof(clockinfos) / sizeof(*clockinfos); i++) {
+		clock_id = clockinfos[i].clk_id;
+		if (!check_clock_gettime())
+			continue;
+
+		start = bench_begin();
 		for (int c = 0; c < count; c++) {
-			TESTS[i].fun();
+			now_clock_gettime();
 		}
+		bench_end(start, clockinfos[i].name, count);
 
-		end = test_gettimeofday();
-
-		fprintf(stderr, "%-24s %.2lf ns/call\n", TESTS[i].name,
-			(end - start) / count);
 	}
 
 	return 0;
