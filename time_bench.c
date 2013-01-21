@@ -6,17 +6,6 @@
 #include <assert.h>
 #include <string.h>
 
-enum {
-	TESTS_MAX = 32
-};
-
-struct test {
-	const char *name;
-	double (*fun)(void);
-} tests[TESTS_MAX];
-
-size_t tests_max = 0;
-
 double
 stub_call(void)
 {
@@ -45,10 +34,10 @@ now_time(void)
 	return time(NULL);
 }
 
-struct clockinfo {
+struct test {
 	const char *name;
 	clockid_t clk_id;
-} clockinfos[] = {
+} tests[] = {
 
 	{"CLOCK_REALTIME",  CLOCK_REALTIME},
 #if defined(CLOCK_REALTIME_COARSE)
@@ -175,8 +164,8 @@ main(int argc, char *argv[])
 	bench_end(start, "time", count);
 
 	/* clock_gettime benchmarks */
-	for (size_t i = 0; i < sizeof(clockinfos) / sizeof(*clockinfos); i++) {
-		clock_id = clockinfos[i].clk_id;
+	for (size_t i = 0; i < sizeof(tests) / sizeof(*tests); i++) {
+		clock_id = tests[i].clk_id;
 		if (!check_clock_gettime())
 			continue;
 
@@ -184,7 +173,7 @@ main(int argc, char *argv[])
 		for (int c = 0; c < count; c++) {
 			now_clock_gettime();
 		}
-		bench_end(start, clockinfos[i].name, count);
+		bench_end(start, tests[i].name, count);
 
 	}
 
